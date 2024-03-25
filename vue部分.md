@@ -456,3 +456,130 @@ v-if 和 v-show 都是 Vue.js 中用于控制元素显示的指令，但它们�
 
 简而言之，如果你需要频繁切换一个元素的显示状态，v-show 是更好的选择；而如果元素仅在某些条件下才显示，并且这些条件不那么频粹变更，那么v-if可能会是一个更适合的选择。
 
+##  12. v-model 是如何实现的，语法糖实际是什么？
+
+v-model是Vue.js中用于创建双向数据绑定的一个指令，通常用在表单元素上(如input, select, textarea等), 它能够将表单元素的值与Vue实例的数据保持同步
+
+**如何实现的**
+
+v-model在底层主要是结合了以下两个方面的功能：
+
+1. **数据到视图的绑定**：当Vue实例的数据变化时，v-model保证了这些变化能够更新到绑定的表单元素上，即视图的更新
+
+2. **视图到数据的绑定**：当表单元素的值被用户更改时，v-model保证了变更能够更新回Vue实例的数据中，即数据的更新
+
+实际上，v-model相当于以下代码的语法糖
+
+对于input(text类型)元素：
+
+```
+<input v-model="someData">
+
+<!-- 等价于 -->
+
+<input v-bind:value="someData" v-on:input="someData = $event.target.value">
+```
+
+对于checkbox和radio类型的input元素，实现细节略有不同，因为这些元素的值通常是boolean或一些已定义好的静态值：
+
+```
+<!-- Checkbox -->
+<input type="checkbox" v-model="checked">
+
+<!-- 等价于 -->
+
+<input
+  type="checkbox"
+  v-bind:checked="checked"
+  v-on:change="checked = $event.target.checked">
+  ```
+
+  ```
+  <!-- Radio -->
+<input type="radio" v-model="picked" v-bind:value="someValue">
+
+<!-- 等价于 -->
+
+<input
+  type="radio"
+  v-bind:checked="picked === someValue"
+  v-on:change="picked = $event.target.value">
+  ```
+
+对于select元素
+
+```
+<select v-model="selected">
+
+<!-- 等价于 -->
+
+<select v-bind:value="selected" v-on:change="selected = $event.target.value">
+  <option>A</option>
+  <option>B</option>
+</select>
+```
+
+**语法糖实际是什么**
+
+语法糖(Syntactic sugar)是一个编程术语，指的是在编程语言中添加的某种语法，这种语法对语言的功能没有影响，但却使代码更加简洁易读。v-model就是一个典型的语法糖，它使得开发者能够使用简短的指令来替代可能更加繁琐的v-bind和v-on组合
+
+在Vue.js 2.x中，v-model的默认行为可以通过以上方式理解。而在Vue。js 3.x之中，v-model变得更加通用和可配置，增加了对自定义组件的v-model的支持，通过modelValue作为prop和update:modelValue作为事件实现了更加自由的双向数据绑定
+
+总之，v-model使得表单数据绑定在Vue.js中变得直观和易于管理，它背后的具体实现是通过适当的输入事件监听和属性绑定来完成的
+
+
+##  13.data为什么是一个函数而不是对象
+在Vue.js中，使用函数返回一个对象作为组件的data的主要原因是为了确保每个组件实例都可以维护一份被返回对象的独立的拷贝。
+
+如果data是个对象，那么它将在所有组件实例之间共享。这意味着，如果一个组件实例改变了这个数据对象的任何属性，那么所有其他使用这个数据对象的组件实例都会受到影响，这可能会引入许多难以追踪的状态相关的问题
+
+通过使用一个函数来返回数据对象，每次创建一个新的组件实例时，它都会调用这个data函数来创建一个新的数据对象。这样，每个组件实例都有一个属于自己的数据副本，修改其中一个实例的数据不会影响到其他实例
+
+举个例子，对于组件的定义方法：
+```
+Vue.component('my-component', {
+  data: function () {
+    return {
+      counter: 0
+    }
+  },
+  template: '<button @click="counter++">{{ counter }}</button>'
+});
+
+```
+每次使用\<my-component>\</my-component>时，Vue都会调用data函数来得到新的数据对象counter初始值为0。每个\<my-component>实例操作自己的counter不会影响到其它\<my-component>实例的counter值
+
+这种方式时组件数据隔离的一个重要手段，确保了组件的独立性和可重用性。对于根实例(或单实例组件)我们一般不会有多个实例的情况，所以直接使用对象也没关系
+
+
+##  14.对keep-alive的理解，它是如何实现的，具体缓存的是什么？
+
+keep-alive是Vue.js中一个内置的抽象组件，它可以用来包裹动态组件或者有条件渲染的组件，从而使得其状态在渲染时可以被保留，即使它们在DOM中被切换或者移除。通过这种方式，keep-alive可以保持组件的状态或避免重新渲染，从而提升了性能
+
+**如何实现的**
+
+keep-alive实际上通过以下两个核心步骤实现
+
+1. **缓存渲染VNode(虚拟节点)**：当组件第一次渲染后，keep-alive会将它的virtual DOM和组件实例等缓存下来。如果组件命中缓存，则会重用这些缓存的实例而非重新渲染。这意味着所有的组件状态会被保存下来
+2. **控制组件的生命周期钩子函数**：当组件被包裹在keep-alive中时，它的activated和deactivated这两个生命周期钩子函数会被触发。activated时当组件被激活时(即从缓存中挂载到DOM)时调用，而deactivated是当组件被停用(即从DOM中移除但是保存在缓存中)时调用
+
+**具体缓存的是什么**
+
+keep-alive缓存的是组件的实例以及它对应的虚拟DOM节点，这包括了以下部分：
+
+1. **组件实例**：组件的状态、局部数据、计算属性和组件方法被保存在实例中
+2. **组件树(包括子组件)**：不仅是被keep-alive直接包裹的组件，其子组件树也会被缓存
+3. **组件的虚拟DOM**：DOM元素并未在缓存中保存，保存的是虚拟节点数，即Vue在内存中保存的对应的数据结构
+
+**用法示例**
+
+```
+<keep-alive>
+  <component :is="currentView">
+    <!-- 这里是会被缓存的组件 -->
+  </component>
+</keep-alive>
+```
+
+在本例中，currentView是一个动态的组件(如可以是'home'、'about'等)。当currentView的值来回切换时，之前已经渲染过的组件实例会被keep-alive缓存起来，当切换回来的时候，可以迅速恢复之前的状态
+
