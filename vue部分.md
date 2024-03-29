@@ -958,6 +958,414 @@ SSR的缺点：
 
 总的来说，MVVM架构模式适用于中大型项目，它能够显著提高项目的可维护性和可扩展性。不过对于小型项目或简单的页面，使用MVVM可能会带来不必要的开销和复杂度。选择合适的架构模式应当基于项目的具体需求和团队的技术栈
 
+#  二、生命周期
+
+##  1.说一下Vue的生命周期
+在Vue.js中，每个Vue实例在被创建时都会经历一系列的初始化过程-例如，它需要设置数据监听、编译模板、将实例挂载到DOM并在数据变化时更新DOM等。这些过程都会触发一系列的生命周期钩子，允许用户在特定的时间点添加他们自己的代码
+
+以下时Vue实例的主要生命周期钩子：
+
+1. **beforeCreate**:
+
+在实例初始化之后、数据观测(data observation)和事件/侦听器的配置之前被调用
+
+2. **created**
+
+在实例创建完成后被立即调用。在这一步中，实例已经完成了数据观测(数据响应式)、属性和方法的运算、watch/event事件回调。然而，挂载阶段还没开始，$el属性目前不可见
+
+3. **beforeMount**
+
+在挂载开始之前被调用：相关的render函数首次被调用。该钩子在服务器端渲染期间不被调用
+
+4. **mounted**
+
+在el被新创建的vm.$el替换，并挂载到实例上去之后调用该钩子。如果根实例挂在了一个文档内元素，当mounted被调用时vm.$el也在文档内
+
+5. **beforeUpdate**
+
+在数据更新之前调用，发生在虚拟DOM打补丁之前。这里适合在更新前访问现有的DOM，比如手动移除已添加的事件监听器
+
+6. **updated**
+
+在由于数据变化导致的虚拟DOM重新渲染和打补丁之后调用。在这个钩子被调用时，组件DOM已经更新，所以现在可以执行依赖于DOM的操作。然而在大多数情况下，你应该避免在此期间更改状态，因为这可能会导致无限循环的更新
+
+7. **beforeUnmount**(在Vue3.x中新引入)
+
+在卸载组件实例之前调用。这个钩子在服务器端渲染期间不被调用
+
+8. **unmounted**
+
+在调用了destroy钩子后，组件被卸载后调用。这时组件的所有指令都被卸载，所有的事件监听器被移除，所有的子实例也都被卸载
+
+9.  **beforeDestroy**(在Vue2.x中，对应Vue3.x中的beforeUnmount)
+
+在实例销毁之前调用。在这一步，实例仍然完全可用
+
+10. **destroyed**(在Vue2.x中，对应Vue3.x中的unmounted)
+
+在实例销毁之后调用。调用后，Vue实例指示的所有东西都会解绑定，所有的事件监听器被移除，所有的子实例也都会被销毁
+
+
+##  2.Vue子组件和父组件执行顺寻
+
+**加载渲染过程**：
+
+1. 父组件beforeCreate
+2. 父组件created
+3. 父组件beforeMount
+4. 子组件beforeCreate
+5. 子组件created
+6. 子组件beforeMount
+7. 子组件mounted
+8. 父组件mounted
+
+
+**更新过程**：
+
+1. 父组件beforeUpdate
+2. 子组件beforeUpdate
+3. 子组件updated
+4. 父组件updated
+
+
+**销毁过程**：
+
+1. 父组件beforeDestroy
+2. 子组件beforeDestroy
+3. 子组件destroyed
+4. 父组件destroyed
+
+##  3.created和mounted的区别
+
+在Vue.js中，created和mounted都是组件生命周期钩子，但它们在组件初始化和渲染过程中的作用和触发时机不同
+
+**created**
+
+created钩子在组件实例被创建并且数据观测、事件监听、属性计算等初始化工作完成后被调用，但此时组件尚未挂载，因此它的模板和虚拟DOM还没有编译和渲染们同时$el属性还不存在
+
+created是非常适合进行一些初始化的数据请求的地方，例如从后端API获取数据来填充组件的数据模型(data)，因为此时的数据已经被响应式系统处理，但组件还没有渲染到DOM中
+
+**mounted**
+
+mounted钩子在组件的模板和虚拟DOM已经编译并挂载到实际的DOM节点上之后被调用。这意味着当mounted钩子被执行时，你可以获取和操作DOM元素，执行如DOM操作或在挂载完成后才能执行的客户端的第三方库初始化等操作
+
+简单地说，如果你需要在DOM真实存在后执行某些操作，就应该在mounted生命周期钩子中执行这些操作。但需要注意，如果你是在服务器端渲染(SSR)的上下文中，mounted钩子只会在客户端执行
+
+**总结**
+- **created**：组件实例已创建，数据已经准备好，模板尚未开始编译，真实DOM尚未生成
+- **mounted**：模板编程成真实DOM，DOM已经挂载到页面上，可执行相关的DOM操作和优化
+
+
+由于mounted只确保组件自己的模板被渲染了，如果组件有子组件的话，mounted不保证子组件已经被挂载。因此，如果你需要等待整个视图都渲染完毕，你可能需要使用\$nextTick或vm.$children来辅助确保所有子组件也已经渲染完毕
+
+
+##  4.一般在哪个生命周期请求异步数据
+在Vue.js中，异步数据请求通常在created生命周期钩子中进行。调用时机是因为在created钩子中，组件实例已经完成了初始化，数据已经被设置，计算属性已经可用，方法已经绑定，但是组件尚未挂载，意味着DOM还未生成
+
+在created钩子中发出异步请求有以下几个好处：
+
+1. **数据响应式**：由于数据已经被设置，你可以将异步返回的数据直接赋值给数据模型(data)，Vue会自动将其转换为响应式数据
+2. **更快的用户体验**：由于在组件刚创建时就发出请求，可以让用户看到数据更快地被渲染，这样可以减少页面空白的事件
+3. **服务端渲染(SSR)兼容性**：如果你再使用服务器端渲染，将数据请求放在created钩子中可以保证，无论是在客户端还是服务器端实例化组件，数据请求都能被正常执行
+   
+然而在某些场景下，如果你的数据请求需要访问或操作DOM，或依赖于DOM的计算(比如获取元素的尺寸来请求相应大小的数据)，那么应该在mounted生命周期钩子中进行。
+
+简而言之，如果不需要与DOM交互进行数据请求，则推荐在created生命周期钩子中进行；如果你的数据请求依赖于DOM，或需要在数据请求完成后立即进行DOM操作，那么应该在mounted生命周期钩子中执行
+
+
+##  5.keep-alive 中的生命周期哪些？
+
+在Vue中使用keep-alive组件可以使被包裹的组件保持状态，避免重新渲染，从而提升性能。keep-alive特有的生命周期钩子主要有两个：
+
+1. **activated**：当组件被keep-alive缓存的内容再次激活(即插入到文档DOM中)时调用
+2. **deactivated**：当组件被移除(即从文档DOM中除去)时调用
+
+使用keep-alive包裹组件时，组件不会经历正常的挂载和销毁过程，其正常的mounted和destroyed钩子不会被调用。相反，每次激活(重新插入DOM)或停用(从DOM中移除)这个组件时，activated和deactivated钩子将被触发
+
+例如，如果你有一个列表页面和详情页面，从列表页面导航到详情页面时，你可能不希望列表状态丢失，以保持滚动位置或之前的搜索状态。你可以使用keep-alive来缓存列表页面组件，这样用户从详情页面返回列表页面时，列表页面不会被重新渲染，用户会看到之前的状态，而是直接从缓存中恢复
+
+在这种情况下，当你从列表页面(被keep-alive缓存)导航到详情页面时，列表页组件会触发deactivated钩子。当用户从详情页返回列表页面时，组件会触发activated钩子
+
+需要注意的是，keep-alive仅适用于组件(带有模板的Vue实例)，不适用于纯粹的JavaScript对象
+
+
+# 三、组件通信
+
+##  1. props / $emit
+
+**props**
+
+props是组件对外的接口，用于接收来自父组件的数据。当需要将数据从父组件传递到子组件时，可以通过props来实现。父组件通过标签上的属性传递数据给子组件的props，子组件中通过声明props的方式来接收这些数据
+
+父组件中的用法示例如下：
+```
+<!-- 父组件模板 -->
+<child-component :prop-name="value"></child-component>
+```
+
+子组件中的用法实例如下：
+```
+// 子组件定义
+Vue.component('child-component', {
+  props: ['propName'],
+  // ...
+})
+```
+子组件中定义了props选项，这里的propName就是父组件传递下来的数据，子组件可以像使用本地数据一样使用这些props
+
+**$emit**
+$emit是用于子组件向父组件发送消息(触发事件)的方法。当子组件需要通知父组件发生了某些事件，或者需要传递一些数据给父组件时，可以使用$emit来发出一个自定义事件，并且可以附带参数传递数据
+
+子组件中的用法示例如下
+```
+// 子组件中触发事件
+this.$emit('custom-event', data);
+```
+
+父组件中需要监听这个事件并定义相应的处理函数
+```
+<!-- 父组件模板 -->
+<child-component @custom-event="handleEvent"></child-component>
+```
+在父组件的方法中接收事件参数：
+```
+// 父组件的方法
+methods: {
+  handleEvent(data) {
+    // 处理子组件传递来的数据
+  }
+}
+```
+
+通过在子组件中使用$emit发出事件，在父组件中监听这个事件，我们可以实现子到父的通信。这种方式在实践中非常常见，尤其是在实现自定义组件时，$emit能够让父组件知道何时以及如何相应子组件发出的事件
+
+总的来说，props是父传子的单项数据流，而$emit则用于子反馈给父的事件通信机制
+
+
+##  2.eventBus事件总线（$emit / $on）
+
+eventBus(事件总线)是Vue中另一种组件间通信的方式，它能够帮助不相关的组件之间进行通信。在Vue中使用事件总线的方式就是利用Vue实例的$emit和$on方法
+
+**实现eventBus**
+
+通常情况下，我们可以创建一个新的Vue实例作为事件总线，并利用它来触发事件和监听事件
+```
+const eventBus = new Vue();
+```
+
+**使用$emit触发事件**
+
+任何组件都可以通过调用事件总线上的$emit方法来触发一个事件，并传递数据：
+```
+// 组件A发出事件
+eventBus.$emit('eventName', data);
+```
+
+**使用$on监听事件**
+
+其他组件可以通过$on方法在事件总线上监听这些事件，并定义相应的行为：
+```
+// 组件B监听事件
+eventBus.$on('eventName', (data) => {
+  // 响应事件，处理数据
+});
+```
+
+
+**示例**
+
+以下是一个简单的事件总线使用的例子：
+```javascript
+// main.js
+import Vue from 'vue';
+export const eventBus = new Vue();
+
+// ComponentA.vue
+<template>
+  <!-- ... -->
+</template>
+
+<script>
+import { eventBus } from './main.js';
+
+export default {
+  methods: {
+    sendData() {
+      eventBus.$emit('send-data', 'Hello from Component A!');
+    }
+  }
+};
+</script>
+
+// ComponentB.vue
+<template>
+  <!-- ... -->
+</template>
+
+<script>
+import { eventBus } from './main.js';
+
+export default {
+  created() {
+    eventBus.$on('send-data', (message) => {
+      console.log(message); // Outputs: 'Hello from Component A!'
+    });
+  },
+  beforeDestroy() {
+    eventBus.$off('send-data'); // it is important to clean up the event listeners when the component is destroyed
+  }
+};
+</script>
+```
+
+在这个例子中，ComponentA组件发送数据时触发了事件总线上的send-data事件，ComponentB组件监听了这个事件并在控制台上打印消息
+
+**注意**
+- 一定要在组件的beforeDestroy生命周期钩子中用$off注销监听器，以防止内存泄漏
+- 对于简单的场景或少量的跨组件通信，事件总线是一个实用的解决方案。但是如果项目较大或者通信较复杂，使用Vuex这样的状态管理库通常会更合适，因为它提供了更好的状态管理和更加结构化的通信机制
+
+##  3.依赖注入（provide / inject）
+
+在Vue中，依赖注入是一种特别的通信和状态共享方式，允许祖先组件向其所有子孙组件注入依赖，而无需通过每个层级逐层传递props
+
+依赖注入是通过两个选项实现的：provide和inject
+
+**provide**
+
+provide选项允许你指定希望向下注入到组件树中的数据或方法。它可以是一个对象，或者返回一个对象的函数。祖先组件中使用provide来提供数据
+```javascript
+export default {
+  //...
+  provide() {
+    return {
+      sharedData: 'this is some shared data'
+    };
+  }
+};
+```
+在上面的代码中，祖先组件提供了一个名为sharedData的数据属性
+
+**inject**
+
+injdect选项在接收组件中使用，用来指明要接收哪些来自祖先组件的数据。子孙组件可以使用inject来接收祖先组件中provide的数据：
+```javascript
+export default {
+  //...
+  inject: ['sharedData'],
+  mounted() {
+    console.log(this.sharedData);  // 输出：this is some shared data
+  }
+};
+```
+在上面的代码中，任何子孙组件都可以使用inject来引入sharedData数据
+
+**注意**
+
+- 被inject的属性是响应式的，如果provide的是一个可观察的状态(例如Vue.observable创建的对象或在data中的数据)，那么当这个状态改变时，所有注入了此状态的组件也会更新
+- provide和inject绑定并不是可相应的，除非provide的值时响应式对象。理想情况下，你应该避免更改provide传递的对象，以防止不可预测的组件行为
+- 依赖注入通常用于高级插件或组件库的开发中，其中一些组件需要访问共享资源，尤其适用于跨多个层级的组件通信，因为它避免了层层传递props的麻烦
+- provide/inject在设计上并不是用来作为组件之间传递属性的主要方式，不应该替代props和事件。当组件间的关系更加明确，或需要更好的组件封装和复用时，应优先使用props和事件
+
+总的来说依赖注入provide/inject为组件树内部的通信提供了一种灵活的解决方案，特别适合于开发深度嵌套的组件，同时要避免props的层层传递
+
+
+##  4.$parent / $children
+
+$parent / $children是Vue实例的属性，它们提供了一种在组件之间直接访问父组件实例和子组件实例的方法，它们可以被用来进行组件间通信，尽管这种方式不是最推荐的做法
+
+**$parent**
+
+\$parent属性提供了对父组件实例的引用。这意味着在任意子组件中，你可以使用this.$parent来访问它的直接父组件的数据、属性、方法等。举个例子：
+```javascript
+// 子组件中
+export default {
+  mounted() {
+    console.log(this.$parent.someData); // 可以访问父组件的数据
+    this.$parent.someMethod();          // 可以调用父组件的方法
+  }
+};
+```
+但是，频繁使用$parent可能会导致组件间的耦合过于紧密，这与Vue推荐的数据下行、事件上行的通信模式相违背
+
+**$children**
+
+相对地，\$children属性包含了父组件模板中所有子组件的实例数组。父组件可以通过this.$children来访问这些子组件的实例。例如：
+```javascript
+// 父组件中
+export default {
+  mounted() {
+    this.$children.forEach((child, index) => {
+      console.log(child.someData);      // 访问子组件的数据
+    });
+  }
+};
+```
+
+不过，需要注意的是$children并不保证子组件的顺序，也不是响应式的，因此它主要用于访问子组件实例，而不是用于依赖其顺序的数据绑定
+
+**注意事项**
+- 使用\$parent和$children可能会导致代码难以维护，并不利于组件的解耦。依赖这些引用会使得组件间有隐式的依赖关系，使得组件的可重用性和可测试性下降
+- 如果可能，应避免使用\$parent和\$children，而是使用props和事件(用\$emit传递自定义事件)，或者通过依赖注入(provide/inject)来进行组件间通信
+- 某些情况下，如在动态生成的子组件或由于特定实现而无法使用props传递数据时，您可能不得不使用\$parent或\$children，但应将其用途最小化并严格控制
+
+
+总的来说尽管\$parent和$children在某些场景下可以用于组件间通信，但它们违背了Vue推崇的组件通信原则，因此在组件设计中应该谨慎使用，优先考虑其他通信方式
+
+
+##  5.$attrs / $listeners
+
+在Vue中，\$attrs和$listeners是实例属性，它们通常在组件通信中，特别是在构建高阶组件或组件库时使用
+
+**$attrs**
+
+\$attrs包含了父作用域中(不是props属性的)绑定到子组件上的属性(即非prop的attribute)，这些属性是继承属性。这意味着它们不在子组件的props配置中声明，也没有再子组件的模板中用作局部变量。\$attrs在Vue2.4.0+版本引入，并自动将任何不在子组件的porps配置中声明的属性添加到子组件的根元素上
+
+举个例子，如果你又一个包裹组件和一个按钮组件，你想要任何非prop属性能够传递给按钮组件，你可以通过$attrs来实现
+
+```javascript
+// 包裹组件
+Vue.component('wrapper-component', {
+  template: '<button-component v-bind="$attrs" />'
+});
+
+// 按钮组件
+Vue.component('button-component', {
+  props: ['disabled'], // 预期的prop
+  template: '<button :disabled="disabled">Click me!</button>'
+});
+```
+
+在这个例子中，绑定到\<wrapper-component>上的所有非prop属性会通过$attrs传递给\<button-component>
+
+**$listeners**
+\$listeners属性包含了父作用域中绑定在子组件上的非.native修饰的事件。它是一个对象，里面包含了作为子组件事件监听器的属性。在Vue3中，$listeners被移除，因为所有事件监听器被合并到了v-on="$attrs"中
+
+在Vue2中，可以使用$listeners来将父组件中绑定的事件监听器转发到子组件中的其他元素：
+```javascript
+// 父组件
+Vue.component('parent-component', {
+  template: '<child-component @click="handleClick" />',
+  methods: {
+    handleClick() {
+      console.log('Clicked!');
+    }
+  }
+});
+
+// 子组件
+Vue.component('child-component', {
+  template: '<div v-on="$listeners">Click Me</div>'
+});
+```
+在上述代码中，子组件\<child-component>不会直接对点击事件作出反应。$listeners对象将点击事件监听器传递给子组件模板内的\<div>元素
+
+
+**使用注意**
+- 使用\$attrs和$listners时要注意，它们并不是响应式的，所以如果它们的属性或事件监听器在负组件中发生变化，可能不会引发子组件中的更新
+- Vue3中移除了$listners，事件监听器自动包含在\$attrs中，这样可以简化转发事件监听器的操作
+- 使用这些通信方式时要明确组件之间的界限和责任范围，确保组件的清晰度和可维护性
+
+\$attrs和\$listeners提供了一种机制，可以在构建可复用和高阶组件时更灵活地传递数据和事件，但通常不用于简单的父子组件通信。基于这些特征，开发者可以创建出具有更好封装和更广泛适用性的组件
 
 
 
