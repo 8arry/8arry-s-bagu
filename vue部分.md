@@ -1368,4 +1368,829 @@ Vue.component('child-component', {
 \$attrs和\$listeners提供了一种机制，可以在构建可复用和高阶组件时更灵活地传递数据和事件，但通常不用于简单的父子组件通信。基于这些特征，开发者可以创建出具有更好封装和更广泛适用性的组件
 
 
+# 四、路由
+
+##  1.Vue-Router的懒加载如何实现
+
+
+Vue Router的懒加载功能允许您将组件分割成不同的代码块，然后在路由被访问的时候才加载对应组件的代码块。这样可以提高应用的初始加载速度，因为用户并不需要一开始就加载所有的页面。代码分割(或懒加载)在Vue应用中是通过webpack的代码分割(和动态import)或Rollup的动态导入功能来实现的
+
+以下是如何实现Vue Router的懒加载步骤：
+
+1. **定义路由时使用动态导入**：
+
+通常，在使用Vue Router时，你会在路由配置中直接导入组件。例如
+
+```javascript
+import HomePage from './components/HomePage.vue';
+
+const router = new VueRouter({
+  routes: [
+    { path: '/', component: HomePage }
+  ]
+});
+```
+
+为了实现懒加载，不要直接导入组件，而是使用动态导入的方式来定义组件：
+
+```javascript
+const HomePage = () => import('./components/HomePage.vue');
+
+const router = new VueRouter({
+  routes: [
+    { path: '/', component: HomePage }
+  ]
+});
+```
+
+2. **配置webpack的chunk**
+
+你可以更进一步地通过给导入语句添加webpack的特殊注释来命名你的chunks，使它们更容易在输出的打包文件中被识别。例如：
+
+```javascript
+const HomePage = () => import(/* webpackChunkName: "home" */ './components/HomePage.vue');
+```
+
+使用 webpackChunkName 注释可以将所有用到该注释的组件打包在同一个 chunk 中。这意味着如果有多个路由使用了相同的 chunk 名称，它们将共享同一个异步 chunk。
+
+3. **配置babel插件**
+
+如果你使用了Babel，确保安装了babel-plugin-syntax-dynamic-import，它允许Babel正确解析这些动态导入语句
+
+请注意，Vue CLI创建的新项目默认配置了所有必须的webpack和Babel配置，所以你可能不需要手动进行任何额外的配置
+
+通过这种方式，当用户访问某个路由时，Vue Router将动态地加载定义在那个路由配置中的组件。这种按需加载的方式可以大幅提高你应用的性能，特别是在有很多路由和每个路由下都有大量组件时
+
+##  2.路由的hash和history模式的区别
+
+在Vue Router中，路由的hash模式和history模式是控制URL如何显示和工作的两种不同方式。它们之间的主要区别在于它们如何利用浏览器的历史API和URL的锚点(或哈希)来工作
+
+**Hash模式**
+
+hash模式使用URL的hash(即#标记后面的部分)来模拟一个完整的URL，使页面的路径跟随在hash后面。当hash改变时，页面不会重新加载
+
+例如，一个使用hash模式的URL可能会是：
+```
+http://www.example.com/#/user/id
+```
+
+**特点**：
+
+- 使用window.location.hash来实现无需重新加载页面即可改变URL
+- 页面跳转时，只改变#后面的内容，因此不会发送请求到服务器
+- 兼容性好，可以在所有浏览器中工作，包括IE9及更早版本
+- 因为没有实际向服务器发送新的请求去获取页面，所以只有前端知道如何处理路由
+
+
+**History模式**
+
+history模式利用了HTML5 History API(主要是pushState 和 replaceState方法)，它允许改变URL而不重新加载页面
+
+例如，一个使用history模式的URL可能会是
+```
+http://www.example.com/user/id
+```
+
+**特点**
+- 提供了一个更"干净"的URL，没有#
+- 当用户刷新页面，或直接通过URL访问时，浏览器会向服务器发送请求。因此，服务器需要配置以支持SPA的单页面应用，通常是返回应用的主入口文件(例如index.html)，否则会出现404错误
+- 让URL看起来就像传统的服务器渲染的应用路径
+- 不支持老旧的浏览器
+
+
+**对比**
+- **URL美观程度**：history模式能够让URL看起来像普通的网址，不带有#；而hash模式则会包含#
+- **服务器配置**：使用history模式时，任何URL都会要求服务器正确响应，需要后端配置支持；hash模式在浏览器端完成，不需要服务器特别配置
+- **SEO优化**：虽然Google可以抓取某些AJAX内容，但history模式提供的URL格式对于搜索引擎更友好
+- **兼容性**：hash模式几乎在所有浏览器中都可以运行，而history模式需要支持HTML5 History API的浏览器
+
+
+##  3. 如何获取页面的hash变化
+
+在前端开发中，获取页面URL中哈希(hash)值的变化通常是为了响应用户的导航操作，可以通过一些方法来监听和获取哈希变化
+
+**使用window对象的hashchange**事件
+
+可以通过监听hashchange事件来响应URL哈希部分的变化。这个事件在哈希变化时会被触发。你可以像这样添加一个事件监听器：
+
+```javascript
+window.addEventListener('hashchange', function(event) {
+  console.log('The hash has changed!');
+  console.log('Old hash:', event.oldURL.split('#')[1]); // 获取旧的哈希值
+  console.log('New hash:', window.location.hash); // 新的哈希值
+});
+```
+
+在hashchange事件的事件对象中，oldURL和newURL属性分别提供更改前后的完整URL。可以通过分割字符串的方式来获取实际的哈希值
+
+**直接访问window.location.hash**
+
+如果你只是想获取当前页面的哈希值，而不是监听它的变化，可以直接访问window.location.hash属性
+
+```javascript
+let currentHash = window.location.hash;
+console.log(currentHash); // 输出当前的哈希值（带有"#"符号）
+```
+
+这将返回当前URL中的哈希字符串，包括"#"字符
+
+**使用Vue Router**
+
+如果你使用的时Vue.js并且集成了Vue Router，Vue Router会自动处理哈希的变化，并基于它来导航到相应的组件。在Vue Router中，你可以这样监听路由变化：
+
+```javascript
+router.afterEach((to, from) => {
+  console.log('Route has changed!');
+  console.log('Old hash:', from.hash); // 使用from.hash获取旧的哈希值
+  console.log('New hash:', to.hash); // 使用to.hash获取新的哈希值
+});
+```
+
+在上面的代码中，router是Vue Router的实例，afterEach是路由钩子，可以在路由发生变化后执行。
+
+无论是使用原生方法还是Vue Router，监听和获取页面的哈希值都是非常简单直接的
+
+
+##  4.\$route 和$router 的区别
+
+在Vue.js中，当使用Vue Router为应用提供路由功能时，会遇到两个非常重要的对象：\$route和\$router，它们在Vue实例中作为属性存在，并且具有不同的用途和功能。
+
+**\$route**
+
+\$route是一个"路由信息对象"(Route Information Object)，它包含当前激活的路由信息。它是响应式的，当路由发生变化时，\$route对象也会随之更新。它包括以下信息：
+
+- path：字符串，对应当前路由的路径，总是解析为绝对路径，如"/foo/bar"
+- params：一个对象，包含路由中的动态片段和全匹配片段的键值对
+- query：一个对象，表示URL查询参数。例如，对于路径/foo?user=1，则有\$route.query.user == 1
+- hash:URL的哈希部分(带#符号)
+- fullPath：完成解析后的URL包含查询参数和哈希的字符串
+- matched：一个数组，包含当前路由的所有嵌套路径片段的路由记录
+- name：当前路由的名称
+
+你可以通过this.$route来访问这个对象，并获取当前路由的详细信息
+
+**$router**
+
+\$router是"路由器实例"(Router Instance)，指向了包含了整个路由的Vue Router实例。它通过编程式的接口来控制路由，如执行路由跳转、导航等操作。主要包含以下功能：
+
+- push：导航到不同的URL，会往history栈添加一个新的记录，用户点击后退会返回到上一个记录的URL
+- replace：导航到不同的URL，但不会向history添加新记录，替换掉当前的history记录
+- go：这个方法会让内部的history堆栈向前或向后跳转相应的次数
+- back：后退历史记录
+- forward：前进历史记录
+
+要导航到不同的URL，你不会修改\$route，而是使用\$router的方法来让路由实例进行相应的操作
+
+**使用场景**
+
+- 当你需要获取当前路由的路径或参数时，你会用到$route
+- 当你需要改变URL，或者执行某种路由导航的时候，你会使用$router
+
+**例子**
+
+```javascript
+// 获取当前路由的path
+console.log(this.$route.path);
+
+// 编程式地导航到一个新的路由
+this.$router.push('/new-path');
+
+// 将当前页面替换为一个新的路由
+this.$router.replace('/new-path');
+
+// 后退一步
+this.$router.go(-1);
+```
+
+##  5.如何定义动态路由？如何获取传过来的动态参数？
+
+在Vue.js中，动态路由是指路由中包含动态片段(例如参数)的部分。定义动态路由时，需要在路径中的参数前加上冒号：。当一个url匹配到动态路由时，可以在组件内用来获取动态参数
+
+**定义动态路由**
+
+在Vue Router的路由配置中，你可以如下定义动态路由：
+
+```javascript
+// 引入Vue Router
+import VueRouter from 'vue-router';
+import User from './components/User.vue';
+
+// 创建router实例
+const router = new VueRouter({
+  routes: [
+    // 动态路径参数使用冒号标记
+    { path: '/user/:id', component: User }
+  ]
+});
+```
+
+在这个示例中，：id是一个动态片段，当你访问/user/123时，123会是id的值
+
+**获取传递来的动态参数**
+
+定义了动态路由后，可以在组件内用this.$route.params获取动态路径参数
+```javascript
+// User.vue
+<template>
+  <div>
+    <h1>User ID: {{ userId }}</h1>
+  </div>
+</template>
+
+<script>
+export default {
+  computed: {
+    // 使用计算属性来从$route中获取动态参数
+    userId() {
+      return this.$route.params.id;
+    }
+  }
+};
+</script>
+```
+
+在上面的例子中，我们定义了一个计算属性userID来获取当前路由参数id的值。注意，当路由变化时(例如从/user/123导航到/user/456)，当前组件实例会被复用。由于路由参数的变化，通常不会触发组件的生命周期钩子，如果你依赖于参数变化来刷新页面或执行逻辑，你可能需要使用watch来观察\$route对象或使用beforeRouteUpdate导航守卫
+
+```javascript
+export default {
+  watch: {
+    // 监听$route对象，特别是其中的params
+    '$route' (to, from) {
+      // 响应路由参数的变化
+      if (to.params.id !== from.params.id) {
+        // 执行某些操作，如获取新的用户数据
+      }
+    }
+  }
+};
+```
+
+或者使用导航守卫：
+
+```javascript
+export default {
+  beforeRouteUpdate(to, from, next) {
+    // 路由变化前的逻辑
+    // 在这里可以访问 this，因为这不是一个箭头函数
+    this.fetchUserData(to.params.id);
+    next();
+  },
+  methods: {
+    fetchUserData(id) {
+      // 根据id获取用户数据
+    }
+  }
+};
+```
+
+
+##  6.Vue-router 路由钩子在生命周期的体现
+
+Vue-router的路由钩子(也称为导航守卫)和Vue组件的生命周期钩子是Vue应用中非常重要的概念。它们允许开发者在特定的时机点介入应用的运行过程中，执行所需的代码
+
+路由钩子可以分为全局守卫、路由独享的守卫和组件内的守卫。这里会重点解释组件内守卫是如何体现在组件声明周期中的
+
+**组件生命周期与路由钩子**
+
+当组件与路由相关联时，组件内的路由钩子将在不同的生命周期事件中被调用。以下是一个典型的组件生命周期与路由钩子结合时的顺序：
+
+1. **导航被触发**：当你通过\<router-link>或者编程式路由(this.\$router.push或this.\$router.replace)导航到一个路由时，导航过程开始
+2. **调用全局beforeEach守卫**：如果定义了全局前置守卫，首先会调用这个守卫
+3. **调用路由独享的守卫**：如果目标路由配置了beforeEnter守卫，接下来会调用这个守卫
+4. **解析异步路由组件**：如果目标组件是异步组件，会先等待组件解析完成
+5. **在被激活的组件里调用beforeRouteLeave守卫**：当从一个路由导航到另一个路由，并且两个路由使用不同的组件时，当前活跃的组件将调用beforeRouteLeave守卫
+6. **调暗勇全局beforeResolve守卫**：在导航被确认之前，即所有守卫和异步组件被解析之后，调用全局beforeResolve守卫
+7. **导航被确认**：目标路由的进入守卫和组件的守卫解析完成后，导航就被确认了
+8. **调用全局afterEach守卫**：确认导航后，调用全局后置守卫afterEach
+9. **触发DOM更新**：Vue的响应式系统会根据路由的变化来更新DOM
+10. **创建新的组件实例**：如果路由进入一个新的组件，此时组件实例会被创建
+11. **beforeCreate和created生命周期钩子被调用**：在新的组件实例创建后，会依次调用其beforeCreate和created生命周期钩子
+12. **调用beforeRouteEnter守卫**：在新组件被挂载之前，会调用beforeRouteEnter守卫
+13. **beforeMount生命周期钩子被调用**：然后组件的beforeMount钩子将被调用
+14. **组件被挂载到DOM**：组件挂载到DOM后，mounted钩子被调用
+15. **调用beforeRouteUpdate守卫**：(对于重用的同意组件导航)，如果路由导航是在同一个组件内部(只是参数或查询变化)，则会调用beforeRouteUpdate守卫
+16. **updated生命周期钩子被调用**：当组件的数据变化导致更新之后，updated钩子被调用
+
+
+##  7.Vue-router跳转和location.href有什么区别？
+
+Vue-router的跳转和直接设置location.href在改变浏览器URL以及页面导航方面具有本质的区别，这些差异主要体现在以下方面：
+
+**Vue-router跳转**
+
+Vue-router提供了一系列的方法和功能，允许开发者以编程方式导航到不同的路由，例如使用\$router.push、\$router.replace和\$router.go等方法。这些方法提供了SPA(单页应用)中路由变化的控制，并且可以无刷新地在组件间切换，维护了应用状态和生命周期，支持更丰富的导航控制和过渡效果
+
+**特点**：
+
+- **无刷新导航**：在不重新加载整个页面的情况下更新视图，提供了流畅的用户体验
+- **路由钩子**：可以使用Vue-router提供的路由钩子(例如：beforeEach、beforeEnter、afterEach)来控制导航行为、例如进行权限校验、数据获取等操作
+- **状态维护**：应用的状态(包括Vue组件的状态)在路由切换时得以保持，例如不会丢失已经存在的组件状态或者Vuex中的状态
+- **动画/过渡**：可以结合Vue的过度系统实现在路由切换时的动画效果
+
+
+**location.href**
+
+设置location.href会导致浏览器加载新的页面，相当于在浏览器地址栏中输入一个新的URL并回车。这种方式属于传统的多页应用(MPA)页面跳转方式，将重新加载整个页面
+
+**特点：**
+
+- **页面全刷新**：导航会触发新页面的请求，浏览器将重新加载页面，包括HTML、CSS和Javascript等资源文件，从而导致页面闪烁
+- **状态丢失：**当前页面的状态将丢失，所有在内存中的状态(如JavaScript变量)和当前页面的JavaScript执行环境都会被重置
+- **无过渡效果：**标准页面跳转过程没有应用内的动画和过渡效果
+
+
+**对比**
+
+- **性能：**Vue-router跳转通常比location.href更快，因为它避免了重新加载整个页面，提供了更快速的导航体验
+- **SPA与MPA：**Vue-router跳转是为单页应用设计的，而location.href跳转则常用于传统的多页应用。
+- **控制：**Vue-router跳转提供更精细的导航控制，例如它允许你根据用户的操作或应用的状态来预防导航或更改导航行为
+- **历史记录：**Vue-router的某些跳转方法(如\$router.replace)不会向浏览器的历史记录栈中添加新的记录，而location.href总是会添加新的历史记录
+- **SEO：**由于location.href触发的是全新的页面加载，它更适合SEO，并且搜索引擎更易于抓取整页内容
+
+总的来说，location.href更像是传统的页面全量跳转方式，而Vue-router提供了现代单页应用中无刷新导航的能力，两者适用于不同的场景与需求
+
+##  8.params和query的区别
+
+在Vue Router中，params和query是两种不同的路由参数，它们用于传递信息给路由的目标页面。这两者在URL结构、使用方式和特点上都有所不同
+
+**params(路径参数)**
+
+- **URL结构**：params参数作为URL的一部分，通常位于基本的URL路径之中。例如：/user/123，其中123是一个参数
+- **定义方式**：在路由配置中，需要在路径中使用：来指定参数的名称，如/user/:id
+- **获取方式**：在组件中可以通过this.\$route.params来获取这些参数，如this.\route,params.id
+- **特点**：params在使用\<router-link>标签或\$router.push()、\$router.replace()方法跳转时必须提供，如果没有提供必须的params参数，将会导致无法正确跳转到目标路由
+
+**query(查询参数)**
+
+- **URL结构**：query参数通常称为查询字符串，位于URL的?符号后面，并以键值对的形式出现。例如：/search?keyword=vue，其中keyword=vue是查询参数
+- **定义方式**：与params不同，query参数不需要在Vue Router的路由路径中预先定义
+- **获取方式**：在组件中可以通过this.\$route.query来获取这些参数，如this.\$route.query.keyword
+- **特点**:query参数在使用\<router-link>标签或\$router.push()、\$router.replace()方法跳转时，不是必须的，可选提供。且query参数不会导致路由匹配失败
+
+
+**示例对比**
+
+举一个具体的例子，假设我们有一个路由配置和两个链接：
+```javascript
+// 路由配置
+const router = new VueRouter({
+  routes: [
+    { path: '/user/:id', component: User }
+  ]
+})
+
+// 跳转 (假设当前的路由为 /user/123)
+<router-link :to="{ path: '/user/123', params: { id: 123 }}">User Profile</router-link>
+<router-link :to="{ path: '/user/123', query: { plan: 'private' }}">User Profile with Plan</router-link>
+
+// 编程式导航
+this.$router.push({ path: `/user/123`, params: { id: 123 } }) // 导航到 /user/123
+this.$router.push({ path: `/user/123`, query: { plan: 'private' } }) // 导航到 /user/123?plan=private
+```
+
+
+在上述代码中，当使用params时，id的值123成为了URL的一部分，形如/user/123.而使用query时，参数plan以查询字符串的形式附加在URL的后面，形如/user/123?plan=private
+
+**小结**
+
+- params映射到URL的路径部分，query映射到URL的查询字符串部分
+- params参数需要在路由定义时指定，而query参数可以随时添加到任何路由
+- query参数更类似于传统网址中GET请求中的查询参数；params则是URL路径的一部分，更类似于具体的资源路径
+- params参数在不同的路由之间需要保持结构的一致性；query参数更灵活，不受路由结构的约束
+
+##  9.对前端路由的理解
+
+前端路由是现代前端框架和库(如Vue.js、React、Angular等)的一个核心概念，它允许开发者在单页应用(SPA)中定义视图之间的导航规则。前端路由使得用户在不重新加载整个页面的情况下，就能够在不同的视图(或称为页面、组件)间切换，从而提供更加流畅和快速的用户体验。以下是对前端路由的一些关键理解
+
+**前端路由的工作原理：**
+
+- **SPA**：在单页应用中，用户与应用的交互是通过单个页面实现的，这个页面在整个生命周期中只会加载一次。前端路由控制在这个页面内部加载不同的内容
+- **History API/Hash**：前端路由通常利用HTML5的Histroy API或者URL的hash(即#后面的部分)来在单页应用内部实现路由管理。History API提供了一种更加现代和优雅的路由实现方式，而hash则被用于向后兼容就浏览器
+- **无刷新交互**：用户在点击链接或者导航时，前端路由会捕获这些事件并组织浏览器向服务器发起新的页面请求。然后根据浏览器的URL变化来决定加载或展示什么样的视图
+
+
+**前端路由的实现**：
+
+- **路由表/配置**：定义一系列路径与组件的映射关系，当用户访问某路径时，前端路由就会加载与之对应的组件
+- **路由链接**：\<a href="...">标签在SPA中通常会被替换成路由链接如(Vue.js的\<router-link>)，这些链接用于触发路由跳转
+- **编程式导航**：除了通过链接点击实现路由跳转外，还可以使用代码(例如router.push或router.navigate方式)来进行导航
+
+# 五、Vuex
+
+##  1.Vuex的原理
+
+Vuex是一个专为Vue.js应用程序开发的状态管理模式。它用一个集中式存储管理应用的所有组件的状态，并以相应的规则保证状态以一种可预测的方式发生变化。Vuex的核心概念和原理包括以下几点：
+
+**单一状态树**
+
+Vuex使用单一状态树-即这个对象包含全部应用层级状态的对象。该对象就是每个Vuex存储的基本数据结构。单一状态树使得我们可以直接定位任一特定的状态片段，在调试过程中也能够更容易地进行状态持久化或状态快照
+
+**组件树的数据来源**
+
+传统的Vue组件通讯多使用props向下传递、用事件向上传递(也有provide/inject等高级特性)，这对少量且嵌套层次不深的组件来说是有效和便捷的。然而，对于大型应用来说，Vuex提供了一种更好的解决方案，任何组件都可以从Vuex store中读取全局状态，也可以执行全局状态变更的行为
+
+**状态管理模式**
+
+Vuex把应用的状态放在一个地方管理，但会有以下几个不同的概念
+
+- **State**：定义了应用状态的数据结构，可以在这里设置默认的初始状态
+- **Getters**：允许组件从Store中获取状态，可认为式store的计算属性
+- **Mutations**:是唯一更改store中状态的方法，它包含同步操作
+- **Actions**：与mutations类似，不同之处在于它们提交的是mutation，而不是直接变更状态，可以包含任意异步操作
+- **Modules**：当应用变得非常复杂时，store对象就可能变得相当臃肿。Modules可以让我们将store分割成模块(module)。每个模块拥有自己的state、mutation、action、getter甚至是嵌套子模块
+
+**响应式原理**
+
+Vuex的状态存储是响应式的，当Vue组件从store中读取状态的时候，若store中的状态发生变化，相应的组件也会相应地得到高效更新
+
+**严格模式**
+
+在严格模式下，Vuex确保状态变更只能在mutation的事件回调中进行，这样有利于我们更好地理解所有的状态变更都是可预测的
+
+**插件功能**
+
+Vuex允许我们在Store上应用插件，例如当状态变化时进行日志记录等。开发者也可以自己编写新的插件应用于Vuex
+
+**开发工具集成**
+
+Vuex支持开发过程中时间旅行式的状态管理调试。通过Vue开发者工具，可以直观的查看到store中的状态变更，甚至可以在测试过程中旅行至状态变更的截点
+
+总结Vuex的原理，其本质时通过集中式存储管理应用的所有组件的状态，并且以一种符合规则的方式确保状态以可预测的形式发生变化。这种模式借助Vue的数据响应机制，保证了状态变更的一致性，并且适合于大型复杂应用的状态管理
+
+
+##  2.Vuex中action和mutation的区别
+
+在Vuex中，mutations和actions是两个专门用于处理状态和逻辑的概念，它们在职责和适用场景上有明显的区别
+
+**Mutations**
+mutations负责执行同步操作，它们是唯一可以直接更改状态(state)的方法。每个mutation都有一个字符串的事件类型(type)和一个会点函数(handler)。这个回调函数就是我们实际进行状态更改的地方，并且它会接受state作为第一个参数
+
+**特点**：
+
+- 只能执行同步操作
+- 通过commit方法触发mutation
+- 便于跟踪状态变化，因为每次commit都会留下记录
+
+```javascript
+// Mutation 定义
+const mutations = {
+  INCREMENT (state) {
+    state.counter++
+  }
+}
+
+// 在组件中触发 Mutation
+this.$store.commit('INCREMENT');
+```
+
+**Action**
+
+actions则负责处理异步操作，它们不能直接改变状态，但可以提交(commit)mutation。actions也可以执行同步操作，但通常用来执行异步逻辑，如从服务器获取数据。每个action也有类型和处理器，处理器可以接收一个与store实例具有相同方法和属性的context对象，从而可以执行提交commit、分发dispatch等操作
+
+**特点**：
+
+- 可以包含任意异步操作
+- 通过dispatch方法触发action
+- 不能直接更改状态-它们必须通过mutation来实现状态改变
+
+```javascript
+// Action 定义
+const actions = {
+  incrementAsync ({ commit }) {
+    setTimeout(() => {
+      commit('INCREMENT')
+    }, 1000)
+  }
+}
+
+// 在组件中触发 Action
+this.$store.dispatch('incrementAsync');
+```
+
+**总结区别**
+
+- **更改方式**：mutation用于更改状态，必须是同步的；action用于提交mutation，可以是异步的
+- **提交方式**：mutation通过commit提交；action通过dispatch分发
+- **执行操作**：mutation中不应该包含异步逻辑；action可以包含异步逻辑和异步操作
+
+因此，在Vuex中，当你需要异步或批量提交多个mutation时，应该使用action；而在你需要直接更改状态时，你应该通过mutation来做到这一点。这样的规则确保了我们能够更好地跟踪和记录状态的变化，因为所有的状态改变都是显示的和可追踪的
+
+##  3.Vuex 和 localStorage 的区别
+
+Vuex和localStorage是两个前端开发中用于存储数据的不同技术，它们有各自的特点和应用场景
+
+**Vuex**
+
+Vuex是一个专为Vue.js应用程序开发的状态管理库，它通过集中式存储管理所有组件的状态，并以一种可预测的方式来保证状态以一致的规则发生变化
+
+**主要特点**：
+
+- **响应式状态管理**：Vuex的状态存储是响应式的，对state的修改会立即反映到视图组件中
+- **组件间共享状态**：方便在多个组件间共享状态，通过getters还可以派生状态
+- **开发工具集成**：提供时间旅行式的状态管理调试
+- **支持插件和中间件**：可以使用插件监听每一个状态变更
+- **严格模式**：在严格模式下，所有的状态变化必须通过mutations，这使状态变更可追溯，易于调试
+
+
+**适用场景**：主要用于大型单页面应用，利于状态的维护和管理
+
+
+**localStorage**
+
+localStorage是Web Storage API提供的一个接口，能让网站在用户的浏览器上保存键值对数据
+
+**主要特点**
+
+- **持久性存储**：数据存储在客户端，持久性保存，即使关闭浏览器或重启电脑后数据依旧存在，直到被手动清除
+- **容量较大**：比cookies提供更大的存储空间
+- **简单API**：提供简单的getItem、setItem、removeItem等API
+- **同步操作**：localStorage的操作是同步的，可能会阻塞主线程
+
+**使用场景**：适用于少量数据的长期保存，例如用户的登录状态、用户偏好设置或其他不需要经常更新的数据
+
+
+**区别总结**
+
+- **数据响应性**：Vuex状态是响应式的，当状态发生变化时，绑定的视图会自动更新；而localStorage不是响应式的，数据更新后需要手动读取最新的数据更新视图
+- **生命周期**：Vuex中的数据只在页面会话期间有效，页面刷新后状态会丢失(除非配合持久化插件)；localStorage中的数据则会一直保存在本地，直到明确的删除操作被执行
+- **目的**：Vuex主要是用来管理和维护应用的状态，而localStorage主要用于持久化地存储数据
+- **大小限制**：localStorage有大小限制(大约5MB)，而Vuex受限于JavaScript引擎和页面的内存限制
+- **数据访问**：Vuex存储在内存中，访问速度块；localStorage存储在硬盘上，数据读写相比内存慢
+- **API复杂度**：Vuex提供了一套复杂的API，如支持mutations、actions、modules等，而localStorage API较简单直接
+
+从上面的比较可以看出，虽然两者都可以用于数据存储，但应用的目的、存储方式和范围有很大区别。合理使用Vuex和localStorage可以使得数据更有效地在Vue.js应用中流转和持久化
+
+##  4.为什么要用 Vuex 或者 Redux
+
+Vuex和Redux这两个状态管理库都是为了解决在复杂应用中，随着组件数量的增加，管理共享状态的复杂性日益增加的问题。它们通过提供一个集中的状态管理机制，帮助开发者在大型应用中维护状态的一致性和可预测性。以下是使用Vuex或Redux的一些主要原因
+
+**组件状态共享**
+
+在多个组件需要共享某些状态时，如果没有集中管理机制，状态的同步和更新将变得复杂和易错。Vuex/Redux提供一个集中的存储，所有需要共享的状态都放在这里，通过同一的接口进行访问和修改
+
+**维护状态的可预测性**
+
+Vuex/redux强制使用明确定义的方法去改变状态，这样可以很容易地追踪每一个状态的变化，这些状态的变化可以通过工具跟踪，记录甚至"时光旅行"进行调试
+
+**状态的持久性和回溯性**
+
+由于所有的状态变化都是通过集中的方式来进行操作的，这使得实现撤销/重做、状态持久化等功能变得容易。开发者可以通过记录或者保存状态历史的快照来回溯状态
+
+**逻辑复用和代码组织**
+
+Vuex/Redux的模式鼓励将业务逻辑提取到独立于组件的地方(如Vuex的actions/mutations或Redux的reducers)，这样可以更容易地复用和测试这些逻辑，以及更好的组织代码结构
+
+**插件和中间件**
+
+Redux/Vuex都允许使用插件和中间件来扩展功能。例如，可以使用中间件来处理日志记录、创建异步操作，或者是向本地存储持久化某些状态
+
+**开发工具支持**
+
+Redux和Vuex都有出色的开发者工具支持。例如Redux DevTools和Vue.js devtools支持状态树的实时观察、调试以及状态的时间旅行功能
+
+**应对大型应用的复杂度**
+
+在大型单页面应用(SPA)中，管理组件的状态变得非常繁琐。Vuex/Redux通过规范化状态便跟提供了一种方法，可以协助开发者管理这种复杂性，并确保应用的高效率和可靠性
+
+**结论**
+
+不是每一个Vue或React应用都需要使用Vuex或Redux。对于小型或中型应用，本地状态管理可能就足够了。但在构建大型应用、需要在组件间共享多个状态时，使用Vuex或Redux可以极大地帮助开发者以可维护和可靠的方式管理状态复杂性
+
+##  5.Vuex和单纯的全局对象有什么区别
+
+Vuex和单纯的全局对象用于在Vue.js应用中共享状态，但存在以下重要区别
+
+**Vuex**
+
+Vuex是一个专为Vue.js设计的状态管理库，用于以可预测的方式处理单页应用中的共享状态
+
+**特点**
+
+- **响应式**：Vuex的状态管理是响应式的，当状态发生改变时，依赖这些状态的组件会自动更新
+- **规范化状态修改**：通过定义mutations和actions，Vuex规范了状态的修改方式，使得状态的变化变得可追踪和可维护
+- **模块化**：Vuex允许将状态分割为模块，方便大型应用的状态管理
+- **集成开发工具**：支持如Vuex时间旅行调试器等开发工具
+- **插件系统**：支持插件，例如用于表单处理和状态持久化的插件
+- **严格模式**：开发模式下，强制通过mutations来更改状态，有助于避免状态修改的不可预测性
+
+**全局对象**
+
+一个简单的全局对象(或单例模式)可以在Vue.js中用来作为全局状态的容器
+
+**特点**：
+
+- **易于创建**：创建一个全局对象只是简单的JavaScript对象编码，不需要专门的库或框架
+- **非响应式**：除非你手动使其响应式，否则全局对象的属性变化不会触发视图更新
+- **无规范化的状态修改**：没有专门的机制来规定如何修改状态，这可能导致难以跟踪和维护状态的修改
+- **缺乏开发工具支持**：不支持Vuex提供的时间旅行调试等待性
+- **无插件系统**：没有内置的插件系统来扩展功能
+- **无严格模式支持**：没有内置机制来强制状态的修改规范
+
+**区别总结**
+
+虽然Vuex和全局对象都能在Vue.js应用中共享状态，但Vuex提供了一套完整的解决方案，包括响应式数据流、状态修改的规范、开发工具等。相比之下，全局对象是一个更为简单的解决方案，适合小型应用或简单的状态共享需求，但随着应用的复杂度增加，全局对象可能会导致状态管理混乱且难以维护
+
+
+##  6.为什么 Vuex 的 mutation 中不能做异步操作？
+
+Vuex要求mutation中不得包含异步操作，主要是因为Vuex的状态管理是同步和可追踪的以下是为什么mutation中不能有异步操作的几个关键原因
+
+1. **状态追踪**
+
+Vuex使用一个存储来持有应用的状态，并确保状态只能以可预测的方式更新。如果mutation中允许异步操作，那么我们将无法准确知道状态是何时更新的。这会导致调试困难，并且使得插件或者Vuex自身的功能(如时间旅行调试)不稳定
+
+2. **响应式系统的限制**
+
+Vue.js使用基于依赖跟踪的响应式系统，并且可以在数据变化时同步地自动更新DOM。同步操作可以确保在执行mutation后组件的视图会立刻反映新的状态。如果在mutation中进行异步操作，这个更新时机的保证就会失效
+
+3. **调试工具和插件**
+
+Vuex支持通过插件集成调试工具，比如Vuex的devtools扩展。这些工具假设使用Vuex的代码遵循同步执行。异步操作会使得调试变得复杂，因为它们导致的状态改变不会被正确记录
+
+4. **维持一致性**
+
+在mutation中执行异步操作会使Vuex的数据流变得不可预测，这与它设计原则相违背。Vuex的设计尽可能地简化应用的状态管理，其关键是让状态变更变得可预测且可靠。所以mutation应该保持简单且同步，而异步逻辑应该被放到action中
+
+**结论**
+
+Mutation中的操作需要是同步的，以便追踪状态的变化，确保响应式系统可以更新到最新的状态，并且使得开发者可以利用调试工具进行问题诊断和应用状态的时间旅行。异步逻辑应该通过action并配合mutation使用，在action中处理异步操作后，使用commit方法提交mutation更改状态。这样可以组织和协调异步业务逻辑和状态管理，确保应用状态的清晰度和一致性
+
+##  7.Vuex的严格模式是什么,有什么作用，如何开启？
+
+Vuex的严格模式是一种开发时的辅助特性，用以确保你的状态管理遵循规则，保证状态的变更都是显式且可追踪的。当严格模式开启时，Vuex会在每次状态变化后进行深度检测，以确保状态的变化是由mutation函数触发的
+
+**作用**
+
+严格模式的主要作用是在开发过程中帮助捕捉违规的状态修改。以下是严格模式的具体作用：
+
+- **确保状态变更的明确性**：所有的状态，必须通过mutation函数修改，而不能直接被外部过程修改，确保了修改的唯一性
+- **帮助开发调试**：如果状态在mutation函数之外被修改(例如，在组件内部直接修改)，Vuex会抛出错误，提醒开发者注意不规范的操作，这有助于及时发现和修正代码问题
+- **保持状态管理的清晰**：保证了改变状态的代码都会集中在mutation函数，有助于代码的维护和管理
+
+
+**如何开启**
+
+严格模式可以通过在创建Vuex store时传入strict：true选项来开启
+
+```javascript
+const store = new Vuex.Store({
+  // ...
+  strict: true
+})
+```
+
+在严格模式下，任何未经mutation函数处理的状态变更都会抛出错误，这有助于开发时及时发现问题。但是请注意，由于严格模式会对状态树进行深度检测，这可能会导致性能开销，因此严格模式旨在开发环境下使用，在生产环境下应该关闭：
+
+```javascript
+const store = new Vuex.Store({
+  // ...
+  strict: process.env.NODE_ENV !== 'production'
+})
+```
+
+如上所示，推荐方式是只在开发环境中启用严格模式，以避免生产环境中因深度检测而引入的性能问题。在构建工具(如Webpack或者Vue CLI)提供的项目模板中，通常会使用环境变量来根据开发还是生产环境来动态决定是否开启严格模式
+
+##  8.如何在组件中批量使用Vuex的getter属性？
+
+在Vue组件中，如果你想要批量使用Vuex的getters属性，可以使用Vuex提供的辅助函数mapGetters。这个辅助函数可以将store中的getter属性映射到本地计算属性，让你可以更方便地在组件模板中访问这些值
+
+以下是如何在组件中使用mapGetters:
+
+首先你需要在你的组件中引入mapGetters：
+
+```javascript
+import { mapGetters } from 'vuex';
+```
+
+接下来，假设你的store中有几个getter函数：
+
+```javascript
+const store = new Vuex.Store({
+  getters: {
+    getterOne: state => state.valueOne,
+    getterTwo: state => state.valueTwo,
+    // 其他 getters...
+  },
+  // ...
+});
+```
+在组件中，你可以使用mapGetters来映射这些getters到计算属性中：
+```javascript
+export default {
+  computed: {
+    // 使用对象展开运算符将 getters 映射为计算属性
+    ...mapGetters([
+      'getterOne', // 将 `this.getterOne` 映射为 `this.$store.getters.getterOne`
+      'getterTwo', // 将 `this.getterTwo` 映射为 `this.$store.getters.getterTwo`
+      // 其他需要映射的 getters...
+    ]),
+    // 你也可以有其他自定义的计算属性
+    customComputed() {
+      // ...
+    }
+  },
+  // ...
+};
+```
+
+现在你可以像访问本地计算属性一样访问这些getters了，例如在你的组件模板中：
+
+```html
+<template>
+  <div>
+    <p>Value One: {{ getterOne }}</p>
+    <p>Value Two: {{ getterTwo }}</p>
+  </div>
+</template>
+```
+
+如果你想要给这些getter属性设定不同的本地名称，也可以将mapGetters用作一个对象形式
+
+```javascript
+computed: {
+  ...mapGetters({
+    localGetterOne: 'getterOne', // 将 `this.localGetterOne` 映射为 `this.$store.getters.getterOne`
+    localGetterTwo: 'getterTwo'  // 将 `this.localGetterTwo` 映射为 `this.$store.getters.getterTwo`
+  }),
+  // ...
+}
+```
+
+这种方式允许你将Vuex的getter映射到组件中的属性，可以随意命名为你所需的任何名字。这在你需要避免命名冲突或者提高可读性的时候特别有用。使用mapGetters可以有效地在组件中批量使用Vuex的getter属性，并保持代码的整洁和可维护性
+
+
+##  9.如何在组件中重复使用Vuex的mutation？
+
+为了在Vue组件中重复使用Vuex的mutation，可以利用Vuex提供的另一个辅助函数mapMutations，类似于mapGetters。这个辅助函数会将指定的mutation方法映射到Vue组件的方法中去，这样你就可以直接调用这些方法来提交mutation，而无需使用this.\$store.commit方法
+
+以下是如何在组件中使用mapMutations的方法
+
+首先在你的组件中引入mapMutations:
+
+```javascript
+import { mapMutations } from 'vuex';
+```
+
+假设你的store中有如下mutation函数
+
+```javascript
+const store = new Vuex.Store({
+  mutations: {
+    increment(state) {
+      state.count++;
+    },
+    decrement(state) {
+      state.count--;
+    },
+    // 其他 mutations...
+  },
+  // ...
+});
+```
+
+在组件中，可以这样使用mapMutations:
+
+```javascript
+export default {
+  methods: {
+    // 使用对象展开运算符将 mutation 方法映射到本地方法
+    ...mapMutations([
+      'increment', // 将 `this.increment()` 映射为 `this.$store.commit('increment')`
+      'decrement', // 将 `this.decrement()` 映射为 `this.$store.commit('decrement')`
+      // 其他需要映射的 mutations...
+    ]),
+    // 你也可以在这里放置其他自定义方法
+    customMethod() {
+      // ...
+    }
+  },
+  // ...
+};
+```
+
+一旦这样设置后，你就可以在组件内部调用increment和decrement方法，就像调用组件的任何其他方法一样。这些调用会触发对应的Vuex mutation
+
+如果你想要为这些mutation方法制定不同的本地名称，你可以使用对象形式的mapMutations：
+
+```javascript
+methods: {
+  // 使用对象形式来给映射的方法重命名
+  ...mapMutations({
+    add: 'increment',     // 将 `this.add()` 映射为 `this.$store.commit('increment')`
+    subtract: 'decrement' // 将 `this.subtract()` 映射为 `this.$store.commit('decrement')`
+  }),
+  // ...
+}
+```
+
+在组件模板中，你可以像使用本地方法一样使用它们
+
+```html
+<template>
+  <button @click="add">Increment</button>
+  <button @click="subtract">Decrement</button>
+</template>
+```
+
+使用mapMutations可以大幅简化组件中对mutation的使用，让代码更简洁，也更易于维护。这对构建大型应用时组织和管理Vuex mutation尤其有帮助
 
